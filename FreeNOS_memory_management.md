@@ -71,7 +71,90 @@ bool MemoryBlock::compare(const void* p1, const void* p2, const Size count)
     return true;
 }
 
-The specific numbers, duration, and dynamics of the memory management system in FreeNOS are not explicitly mentioned in the provided code. More detailed information about the memory management system's performance characteristics and behavior would require a deeper understanding of the entire FreeNOS codebase.
+Numbers:
+
+The system employs the MemoryContext class to manage virtual memory.
+Memory ranges are represented using the Memory::Range structure, which includes fields for virtual address, physical address, size, and access flags.
+The Memory::Access enumeration defines different memory access flags.
+
+Numbers Example: MemoryContext.cpp
+MemoryContext::Result MemoryContext::mapRangeContiguous(Memory::Range *range)
+{
+    Result r = Success;
+
+    // Allocate a block of contiguous physical pages, if needed.
+    if (!range->phys)
+    {
+        Allocator::Range alloc_args;
+        alloc_args.address = 0;
+        alloc_args.size = range->size;
+        alloc_args.alignment = PAGESIZE;
+
+        if (m_alloc->allocate(alloc_args) != Allocator::Success)
+            return OutOfMemory;
+
+        range->phys = alloc_args.address;
+    }
+
+    // Insert virtual page(s)
+    for (Size i = 0; i < range->size; i += PAGESIZE)
+    {
+        if ((r = map(range->virt + i,
+                     range->phys + i,
+                     range->access)) != Success)
+            break;
+    }
+
+    return r;
+}
+
+Duration:
+
+The memory management system allows for the creation and destruction of memory contexts, as indicated by the constructor and destructor of the MemoryContext class.
+Initialization and activation functions (initialize() and activate()) suggest that the memory context can be initialized and activated at specific times during system execution.
+
+Duration Example: MemoryContext.h
+/**
+     * Initialize the MemoryContext
+     *
+     * @return Result code
+     */
+    virtual Result initialize() = 0;
+
+    /**
+     * Activate the MemoryContext.
+     *
+     * This function applies this MemoryContext on the hardware MMU.
+     *
+     * @param initializeMMU If true perform (re)initialization of the MMU
+     *
+     * @return Result code.
+     */
+    virtual Result activate(bool initializeMMU = false) = 0;
+
+Dynamics:
+
+The MemoryContext class provides functions for mapping contiguous and sparse physical pages to virtual addresses (mapRangeContiguous() and mapRangeSparse()).
+Virtual memory ranges can be unmapped using the unmapRange() function, and memory page mappings can be released with the release() function.
+The system includes mechanisms for finding and allocating free memory for requested sizes (findFree()).
+A separate allocator (SplitAllocator) is used to allocate and release physical memory pages.
+Callback mechanisms (m_mapRangeSparseCallback) handle sparse memory mapping and allocation.
+
+Dynamics Example: MemoryContext.h
+/**
+     * Find unused memory.
+     *
+     * This function finds a contigeous block of a given size
+     * of virtual memory which is unused and then returns
+     * the virtual address of the first page in the block.
+     *
+     * @param region Memory region to search in.
+     * @param size Number of bytes requested to be free.
+     * @param virt Virtual memory address on output.
+     *
+     * @return Result code
+     */
+    virtual Result findFree(Size size, MemoryMap::Region region, Address *virt) const;
 
 Advantages and Disadvantages
 
@@ -85,18 +168,13 @@ Generic Memory Operations: The MemoryBlock class provides generic memory block o
 
 Disadvantages of the memory management system used in FreeNOS:
 
-Lack of Specific Details: The provided code does not offer extensive details about the memory management system, such as the underlying algorithms, memory allocation strategies, or handling of memory fragmentation. Without this information, it is challenging to evaluate the system's efficiency and effectiveness comprehensively.
-Comparison to Other Memory Management Systems
-
-Without specific information on the memory management system used in FreeNOS, it is difficult to make a direct comparison to other memory management systems. However, some general observations can be made:
-
 Shared Memory vs. Other Synchronization Mechanisms: The use of shared memory in FreeNOS for inter-process communication differs from other synchronization mechanisms like message passing or socket-based communication. Shared memory can provide high performance and low latency communication, but it requires careful synchronization and management to prevent race conditions and ensure data consistency.
 
 Cache Flushing Techniques: The architecture-specific cache flushing techniques used in FreeNOS may vary compared to other operating systems or memory management systems. Different systems may employ different strategies for cache coherence and synchronization, depending on the specific hardware architecture and requirements.
 
 Conclusion
 
-In conclusion, the memory management system used in FreeNOS incorporates shared memory, cache flushing, and generic memory block operations. Although the provided code snippets offer insights into the system's characteristics, numbers, and dynamics, more specific details are necessary for a comprehensive analysis. The system demonstrates advantages such as efficient communication, cache flushing for memory consistency, and generic memory operations. However, without further information, it is challenging to make a direct comparison to other memory management systems. A deeper understanding of the entire FreeNOS codebase would be required to fully evaluate the system's performance, efficiency, and suitability for different use cases.
+In conclusion, the memory management system used in FreeNOS incorporates shared memory, cache flushing, and generic memory block operations. The system demonstrates advantages such as efficient communication, cache flushing for memory consistency, and generic memory operations. The disadvantages are that while shared memory in FreeNOS allows for high-performance and low-latency inter-process communication, it introduces challenges in terms of synchronization and data consistency. Careful management is required to prevent race conditions and ensure the integrity of shared data. Also, FreeNOS utilizes architecture-specific cache flushing techniques, which may differ from those employed by other operating systems or memory management systems. This variation can lead to differences in cache coherence and synchronization strategies, depending on the specific hardware architecture and system requirements.
 
 References
 
